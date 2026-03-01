@@ -80,3 +80,26 @@ class TestDecideSwitches:
         decisions = decide_switches(scores, chunk_duration_s=2.0)
         total = sum(d.t1 - d.t0 for d in decisions)
         assert abs(total - 20.0) < 0.1  # 10 chunks * 2s
+
+    def test_force_cut_requires_improvement_threshold(self):
+        """Force-cut at MAX_HOLD_S should NOT fire if alternative cam is only 2% better."""
+        chunk_s = 1.0
+        # MAX_HOLD_S = 15s → need 15 chunks before force-cut triggers
+        n = 20
+        # cam_a dominates; cam_b is only 2% better throughout → never should cause force-cut
+        cam_a = [1.0] * n
+        cam_b = [1.02] * n  # 2% better — below IMPROVEMENT_THRESHOLD of 15%
+
+        decisions = decide_switches(
+            {"cam_a": cam_a, "cam_b": cam_b},
+            chunk_duration_s=chunk_s,
+        )
+        # Should stay on cam_a the entire time (no switch; 2% < IMPROVEMENT_THRESHOLD)
+        assert all(d.source_id == "cam_a" for d in decisions)
+
+    def test_beats_param_removed_from_signature(self):
+        """decide_switches must not accept beats or beat_snap_s as parameters."""
+        import inspect
+        sig = inspect.signature(decide_switches)
+        assert "beats" not in sig.parameters
+        assert "beat_snap_s" not in sig.parameters

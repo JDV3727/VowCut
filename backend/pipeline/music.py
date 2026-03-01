@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # Output file inside the project directory
 MUSIC_JSON = "music.json"
 
+# Minimum beats required before using detected grid; below this → uniform fallback
+_MIN_BEATS = 4
+
 
 def _analyze_song(song_path: str) -> dict:
     """
@@ -48,6 +51,14 @@ def _analyze_song(song_path: str) -> dict:
     else:
         tempo = float(tempo)
 
+    # Beat fallback: if too few beats detected, use a uniform grid at the detected tempo
+    beat_fallback = False
+    if len(beat_times) < _MIN_BEATS:
+        beat_fallback = True
+        beat_interval_s = 60.0 / tempo if tempo > 0 else 0.5
+        n_beats = int(duration_s / beat_interval_s) + 1
+        beat_times = [i * beat_interval_s for i in range(n_beats) if i * beat_interval_s <= duration_s]
+
     # Energy curve in 0.5s bins
     hop_s = 0.5
     hop_samples = int(hop_s * sr)
@@ -56,13 +67,16 @@ def _analyze_song(song_path: str) -> dict:
         chunk = samples[start : start + hop_samples]
         energy.append(float(np.sqrt(np.mean(chunk ** 2))))
 
-    return {
+    result = {
         "beats": beat_times,
         "energy_curve": energy,
         "energy_hop_s": hop_s,
         "tempo_bpm": tempo,
         "duration_s": duration_s,
     }
+    if beat_fallback:
+        result["beat_fallback"] = True
+    return result
 
 
 def run(

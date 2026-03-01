@@ -64,7 +64,7 @@ def _xcorr_offset(ref: np.ndarray, sig: np.ndarray, sr_hop: float) -> tuple[floa
     return offset_s, confidence
 
 
-CONFIDENCE_THRESHOLD = 0.1  # below this → low confidence, offset forced to 0
+CONFIDENCE_THRESHOLD = 0.3  # below this → low confidence, offset forced to 0
 
 
 def _align_pair(
@@ -73,6 +73,10 @@ def _align_pair(
 ) -> SyncInfo:
     ref_samples, ref_sr = _load_wav_mono(ref_wav)
     src_samples, src_sr = _load_wav_mono(src_wav)
+
+    # Dead audio guard: silent source cannot be aligned
+    if src_samples.std() < 1e-7:
+        return SyncInfo(offset_s=0.0, scale=1.0, sync_confidence="low")
 
     # Resample to common SR if needed (simple: use librosa)
     if ref_sr != src_sr:
@@ -87,6 +91,12 @@ def _align_pair(
     offset_s, confidence = _xcorr_offset(ref_env, src_env, float(ref_sr))
 
     if confidence < CONFIDENCE_THRESHOLD:
+        return SyncInfo(offset_s=0.0, scale=1.0, sync_confidence="low")
+
+    # Offset sanity check: |offset| >= half the shorter clip duration → unreliable
+    dur_ref = len(ref_samples) / ref_sr
+    dur_src = len(src_samples) / src_sr
+    if abs(offset_s) >= min(dur_ref, dur_src) / 2:
         return SyncInfo(offset_s=0.0, scale=1.0, sync_confidence="low")
 
     conf_label = "high" if confidence > 0.4 else "medium"

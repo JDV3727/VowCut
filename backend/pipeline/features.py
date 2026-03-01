@@ -36,39 +36,57 @@ def _extract_motion_scores(
     chunk_s: float = CHUNK_DURATION_S,
 ) -> list[float]:
     """
-    Use ffmpeg `mestimate` + `metadata` filter to get motion vectors per frame,
-    then average per chunk.
+    Use ffmpeg `scene` filter to get per-frame scene-change scores (0–1),
+    then average per chunk using wall-clock pts_time for assignment.
 
-    Falls back to scene-score-based proxy if mestimate is unavailable.
     Returns one score per chunk.
     """
     n_chunks = max(1, int(duration_s / chunk_s))
     scores_by_chunk: list[list[float]] = [[] for _ in range(n_chunks)]
 
-    # Use select + signalstats to get per-frame YDIF (luma difference)
     cmd = [
         ffmpeg,
         "-i", proxy_path,
-        "-vf", "signalstats,metadata=print:file=-",
+        "-vf", r"select='gte(scene\,0)',metadata=print:file=-",
+        "-an",
         "-f", "null",
         "-",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    output = result.stdout + result.stderr  # metadata goes to stderr with null
 
-    frame_idx = 0
-    for line in output.splitlines():
-        if "lavfi.signalstats.YDIF" in line:
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg scene filter failed (returncode={result.returncode}) for {proxy_path}: {result.stderr[-500:]}"
+        )
+
+    # Parse pts_time + lavfi.scene_score from stdout.
+    # metadata=print:file=- writes to stdout; ffmpeg diagnostics go to stderr.
+    # ffmpeg format (one block per frame):
+    #   frame:N    pts:M       pts_time:T.TTT
+    #   lavfi.scene_score=V.VVVVVV
+    current_pts: float | None = None
+    for line in result.stdout.splitlines():
+        # Frame info line contains pts_time: somewhere in it
+        if "pts_time:" in line:
             try:
-                val = float(line.split("=")[1])
-                chunk_idx = min(int(frame_idx * chunk_s / max(duration_s, 1e-6) * n_chunks), n_chunks - 1)
+                current_pts = float(line.split("pts_time:")[1].split()[0])
+            except (ValueError, IndexError):
+                current_pts = None
+        elif "lavfi.scene_score=" in line and current_pts is not None:
+            try:
+                val = float(line.split("lavfi.scene_score=")[1].split()[0])
+                chunk_idx = min(int(current_pts / chunk_s), n_chunks - 1)
                 scores_by_chunk[chunk_idx].append(val)
-                frame_idx += 1
             except (ValueError, IndexError):
                 pass
+            current_pts = None
 
-    # Average per chunk; default to 0 if no frames landed there
-    return [float(np.mean(v)) if v else 0.0 for v in scores_by_chunk]
+    scores = [float(np.mean(v)) if v else 0.0 for v in scores_by_chunk]
+
+    if all(s == 0.0 for s in scores):
+        logger.warning("All motion scores are zero for %s — scene filter may have produced no output", proxy_path)
+
+    return scores
 
 
 # ---------------------------------------------------------------------------

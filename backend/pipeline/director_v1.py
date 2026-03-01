@@ -11,7 +11,6 @@ Hysteresis rule:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -93,8 +92,6 @@ class CameraDecision:
 def decide_switches(
     scores_by_source: dict[str, list[float]],
     chunk_duration_s: float = 2.0,
-    beats: Optional[list[float]] = None,
-    beat_snap_s: float = 0.15,
 ) -> list[CameraDecision]:
     """
     Apply hysteresis switching to produce a list of CameraDecisions.
@@ -102,8 +99,6 @@ def decide_switches(
     Args:
         scores_by_source: {source_id: [score_chunk_0, ...]}
         chunk_duration_s: duration of each feature chunk
-        beats: beat timestamps for optional snap adjustment
-        beat_snap_s: maximum distance to snap a cut to a beat
 
     Returns:
         List of CameraDecisions sorted by t0.
@@ -147,7 +142,11 @@ def decide_switches(
             and best_score > current_frame_score * (1 + IMPROVEMENT_THRESHOLD)
             and held_s >= MIN_HOLD_S
         )
-        would_force_cut = held_s >= MAX_HOLD_S and best_sid != current_sid
+        would_force_cut = (
+            held_s >= MAX_HOLD_S
+            and best_sid != current_sid
+            and best_score > current_frame_score * (1 + IMPROVEMENT_THRESHOLD)
+        )
 
         if would_switch or would_force_cut:
             decisions.append(CameraDecision(
