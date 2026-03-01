@@ -98,8 +98,8 @@ class TestFeaturesIntegration:
         total_rows = sum(len(v) for v in result.values())
         assert total_rows > 0
 
-    def test_motion_scores_are_plausible(self, features_project):
-        """At least one non-zero motion score should exist for a real video."""
+    def test_activity_scores_are_plausible(self, features_project):
+        """At least one non-zero activity score should exist for a real video."""
         from backend.pipeline import features
         from backend.pipeline.assemble import _load_features
         from backend.pipeline.features import DB_FILENAME
@@ -110,8 +110,8 @@ class TestFeaturesIntegration:
 
         db_path = project_dir / "features" / DB_FILENAME
         result = _load_features(db_path)
-        all_motion = [f.motion_score for feats in result.values() for f in feats]
-        assert any(s > 0.0 for s in all_motion), "All motion scores are zero — scene filter likely broken"
+        all_activity = [f.activity for feats in result.values() for f in feats]
+        assert any(s > 0.0 for s in all_activity), "All activity scores are zero — signalstats likely broken"
 
     def test_idempotency(self, features_project):
         """Running features stage twice should produce the same row count."""

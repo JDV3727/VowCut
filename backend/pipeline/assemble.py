@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .director_v1 import CameraDecision, decide_switches, score_all
+from .director_v1 import CameraDecision, decide_switches, decide_switches_beat_aligned, score_all
 from .features import CHUNK_DURATION_S, DB_FILENAME
 from .music import MUSIC_JSON, snap_to_beat
 from .types import ChunkFeature, Manifest, Segment, Timeline, TimelineMetadata
@@ -34,7 +34,7 @@ def _load_features(db_path: Path) -> dict[str, list[ChunkFeature]]:
     import duckdb  # lazy import so module loads without duckdb installed
     con = duckdb.connect(str(db_path), read_only=True)
     rows = con.execute(
-        "SELECT source_id, chunk_index, t0, t1, motion_score, rms, onset_strength "
+        "SELECT source_id, chunk_index, t0, t1, activity, stability, exposure, rms, onset_strength "
         "FROM chunk_features ORDER BY source_id, chunk_index"
     ).fetchall()
     con.close()
@@ -47,9 +47,11 @@ def _load_features(db_path: Path) -> dict[str, list[ChunkFeature]]:
             chunk_index=row[1],
             t0=row[2],
             t1=row[3],
-            motion_score=row[4],
-            rms=row[5],
-            onset_strength=row[6],
+            activity=row[4],
+            stability=row[5],
+            exposure=row[6],
+            rms=row[7],
+            onset_strength=row[8],
         )
         result.setdefault(sid, []).append(feature)
     return result
@@ -244,14 +246,27 @@ def run(
         segments = _greedy_1cam(scores_by_source[sid], feats, target_length_s, beats)
         emitter.emit("assemble", "running", 0.8, f"{len(segments)} segments (1-cam greedy)")
     else:
-        # Produce camera decisions via hysteresis switching
-        decisions = decide_switches(
-            scores_by_source,
-            chunk_duration_s=CHUNK_DURATION_S,
+        # Full footage duration needed to close the last beat-aligned decision
+        total_duration_s = max(
+            max((f.t1 for f in feats), default=0.0)
+            for feats in features_by_source.values()
         )
-        emitter.emit("assemble", "running", 0.6, f"{len(decisions)} camera decisions")
 
-        # Convert to segments
+        if beats:
+            decisions = decide_switches_beat_aligned(
+                scores_by_source,
+                beats=beats,
+                total_duration_s=total_duration_s,
+                chunk_duration_s=CHUNK_DURATION_S,
+            )
+            emitter.emit("assemble", "running", 0.6, f"{len(decisions)} beat-aligned decisions")
+        else:
+            decisions = decide_switches(
+                scores_by_source,
+                chunk_duration_s=CHUNK_DURATION_S,
+            )
+            emitter.emit("assemble", "running", 0.6, f"{len(decisions)} camera decisions")
+
         segments = _decisions_to_segments(decisions, target_length_s, beats)
         emitter.emit("assemble", "running", 0.8, f"{len(segments)} segments → {sum(s.duration for s in segments):.1f}s")
 

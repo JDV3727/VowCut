@@ -89,7 +89,7 @@ class PipelineState:
 
 @dataclass
 class Versions:
-    feature_version: str = "1"
+    feature_version: str = "2"
     selection_version: str = "1"
 
 
@@ -164,6 +164,8 @@ class ChunkFeature:
     chunk_index: int
     t0: float
     t1: float
-    motion_score: float
+    activity: float        # mean inter-frame luma diff, normalised 0–1 (higher = more movement)
+    stability: float       # inverse of frame-diff variance, 0–1 (higher = steadier camera)
+    exposure: float        # luma-based exposure quality, 0–1 (peaks at mid-grey ≈ 128)
     rms: float
     onset_strength: float

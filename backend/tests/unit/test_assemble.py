@@ -56,7 +56,9 @@ def _make_chunk(source_id: str, chunk_index: int, t0: float, t1: float, score: f
         chunk_index=chunk_index,
         t0=t0,
         t1=t1,
-        motion_score=score,
+        activity=score,
+        stability=score,
+        exposure=score,
         rms=score,
         onset_strength=score,
     )
@@ -101,7 +103,8 @@ class TestEmptyFeaturesGuard:
         con.execute("""
             CREATE TABLE IF NOT EXISTS chunk_features (
                 source_id VARCHAR, chunk_index INTEGER, t0 DOUBLE, t1 DOUBLE,
-                motion_score DOUBLE, rms DOUBLE, onset_strength DOUBLE,
+                activity DOUBLE, stability DOUBLE, exposure DOUBLE,
+                rms DOUBLE, onset_strength DOUBLE,
                 PRIMARY KEY (source_id, chunk_index)
             )
         """)

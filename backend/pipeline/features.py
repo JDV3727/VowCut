@@ -26,28 +26,37 @@ DB_FILENAME = "features.db"
 
 
 # ---------------------------------------------------------------------------
-# Motion extraction via ffmpeg signalstats / scene filter
+# Video feature extraction via ffmpeg signalstats
 # ---------------------------------------------------------------------------
 
-def _extract_motion_scores(
+def _extract_video_features(
     ffmpeg: str,
     proxy_path: str,
     duration_s: float,
     chunk_s: float = CHUNK_DURATION_S,
-) -> list[float]:
+) -> tuple[list[float], list[float], list[float]]:
     """
-    Use ffmpeg `scene` filter to get per-frame scene-change scores (0–1),
-    then average per chunk using wall-clock pts_time for assignment.
+    Extract per-chunk activity, stability, and exposure via ffmpeg signalstats.
 
-    Returns one score per chunk.
+    Single ffmpeg pass using signalstats filter, which outputs per-frame:
+      YDIF — mean absolute luma difference from previous frame (activity proxy)
+      YAVG — mean luma of the frame (exposure proxy)
+
+    Derived metrics per chunk:
+      activity  = mean(YDIF) / 30, clamped 0–1  (higher = more movement)
+      stability = 1 / (1 + std(YDIF) / 10)      (higher = steadier camera)
+      exposure  = tent function on mean(YAVG)    (peaks at mid-grey ≈ 128)
+
+    Returns (activity_list, stability_list, exposure_list), one value per chunk.
     """
     n_chunks = max(1, int(duration_s / chunk_s))
-    scores_by_chunk: list[list[float]] = [[] for _ in range(n_chunks)]
+    ydif_by_chunk: list[list[float]] = [[] for _ in range(n_chunks)]
+    yavg_by_chunk: list[list[float]] = [[] for _ in range(n_chunks)]
 
     cmd = [
         ffmpeg,
         "-i", proxy_path,
-        "-vf", r"select='gte(scene\,0)',metadata=print:file=-",
+        "-vf", "signalstats,metadata=print:file=-",
         "-an",
         "-f", "null",
         "-",
@@ -56,37 +65,70 @@ def _extract_motion_scores(
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"ffmpeg scene filter failed (returncode={result.returncode}) for {proxy_path}: {result.stderr[-500:]}"
+            f"ffmpeg signalstats failed (returncode={result.returncode}) for {proxy_path}: {result.stderr[-500:]}"
         )
 
-    # Parse pts_time + lavfi.scene_score from stdout.
-    # metadata=print:file=- writes to stdout; ffmpeg diagnostics go to stderr.
-    # ffmpeg format (one block per frame):
-    #   frame:N    pts:M       pts_time:T.TTT
-    #   lavfi.scene_score=V.VVVVVV
-    current_pts: float | None = None
+    # Parse from stdout (metadata=print:file=- writes to stdout).
+    # Frame info line: "frame:N    pts:M       pts_time:T.TTT"
+    # Stats lines:     "lavfi.signalstats.YAVG=V" / "lavfi.signalstats.YDIF=V"
+    # current_chunk_idx persists across all stat lines for a given frame.
+    current_chunk_idx: int | None = None
     for line in result.stdout.splitlines():
-        # Frame info line contains pts_time: somewhere in it
         if "pts_time:" in line:
             try:
-                current_pts = float(line.split("pts_time:")[1].split()[0])
+                pts = float(line.split("pts_time:")[1].split()[0])
+                current_chunk_idx = min(int(pts / chunk_s), n_chunks - 1)
             except (ValueError, IndexError):
-                current_pts = None
-        elif "lavfi.scene_score=" in line and current_pts is not None:
-            try:
-                val = float(line.split("lavfi.scene_score=")[1].split()[0])
-                chunk_idx = min(int(current_pts / chunk_s), n_chunks - 1)
-                scores_by_chunk[chunk_idx].append(val)
-            except (ValueError, IndexError):
-                pass
-            current_pts = None
+                current_chunk_idx = None
+        elif current_chunk_idx is not None:
+            if "lavfi.signalstats.YDIF=" in line:
+                try:
+                    val = float(line.split("YDIF=")[1].split()[0])
+                    ydif_by_chunk[current_chunk_idx].append(val)
+                except (ValueError, IndexError):
+                    pass
+            elif "lavfi.signalstats.YAVG=" in line:
+                try:
+                    val = float(line.split("YAVG=")[1].split()[0])
+                    yavg_by_chunk[current_chunk_idx].append(val)
+                except (ValueError, IndexError):
+                    pass
 
-    scores = [float(np.mean(v)) if v else 0.0 for v in scores_by_chunk]
+    activity_list: list[float] = []
+    stability_list: list[float] = []
+    exposure_list: list[float] = []
 
-    if all(s == 0.0 for s in scores):
-        logger.warning("All motion scores are zero for %s — scene filter may have produced no output", proxy_path)
+    for c in range(n_chunks):
+        ydif = ydif_by_chunk[c]
+        yavg = yavg_by_chunk[c]
 
-    return scores
+        if ydif:
+            mean_ydif = float(np.mean(ydif))
+            std_ydif = float(np.std(ydif))
+            activity = min(1.0, mean_ydif / 30.0)
+            stability = 1.0 / (1.0 + std_ydif / 10.0)
+        else:
+            activity = 0.0
+            stability = 0.5  # unknown → neutral
+
+        if yavg:
+            mean_yavg = float(np.mean(yavg))
+            # Tent function: 1.0 at luma=128, degrades toward 0 or 255
+            exposure = max(0.1, 1.0 - abs(mean_yavg - 128.0) / 128.0)
+        else:
+            exposure = 0.5  # unknown → neutral
+
+        activity_list.append(activity)
+        stability_list.append(stability)
+        exposure_list.append(exposure)
+
+    if all(a == 0.0 for a in activity_list):
+        logger.warning(
+            "All activity scores are zero for %s — signalstats may have produced no output",
+            proxy_path,
+        )
+
+    return activity_list, stability_list, exposure_list
 
 
 # ---------------------------------------------------------------------------
@@ -144,14 +186,19 @@ def _init_db(db_path: Path):
     import duckdb  # lazy import
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
+    # Drop and recreate to ensure schema is always current.
+    # The features stage only runs when status != "done", so this is safe.
+    con.execute("DROP TABLE IF EXISTS chunk_features")
     con.execute("""
-        CREATE TABLE IF NOT EXISTS chunk_features (
-            source_id     VARCHAR,
-            chunk_index   INTEGER,
-            t0            DOUBLE,
-            t1            DOUBLE,
-            motion_score  DOUBLE,
-            rms           DOUBLE,
+        CREATE TABLE chunk_features (
+            source_id      VARCHAR,
+            chunk_index    INTEGER,
+            t0             DOUBLE,
+            t1             DOUBLE,
+            activity       DOUBLE,
+            stability      DOUBLE,
+            exposure       DOUBLE,
+            rms            DOUBLE,
             onset_strength DOUBLE,
             PRIMARY KEY (source_id, chunk_index)
         )
@@ -165,11 +212,12 @@ def _upsert_features(con: duckdb.DuckDBPyConnection, features: list[ChunkFeature
     con.executemany(
         """
         INSERT OR REPLACE INTO chunk_features
-            (source_id, chunk_index, t0, t1, motion_score, rms, onset_strength)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (source_id, chunk_index, t0, t1, activity, stability, exposure, rms, onset_strength)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (f.source_id, f.chunk_index, f.t0, f.t1, f.motion_score, f.rms, f.onset_strength)
+            (f.source_id, f.chunk_index, f.t0, f.t1,
+             f.activity, f.stability, f.exposure, f.rms, f.onset_strength)
             for f in features
         ],
     )
@@ -219,14 +267,18 @@ def run(
             log.write(f"{source.id}: {n_chunks} chunks @ {CHUNK_DURATION_S}s each\n")
 
             try:
-                motion_scores = _extract_motion_scores(ffmpeg, source.proxy_path, duration_s)
+                activity_scores, stability_scores, exposure_scores = _extract_video_features(
+                    ffmpeg, source.proxy_path, duration_s
+                )
                 rms_scores, onset_scores = _extract_audio_features(source.audio_path, duration_s)
 
-                # Align lists to n_chunks
+                # Align all lists to n_chunks
                 def _pad(lst: list[float]) -> list[float]:
                     return (lst + [0.0] * n_chunks)[:n_chunks]
 
-                motion_scores = _pad(motion_scores)
+                activity_scores = _pad(activity_scores)
+                stability_scores = _pad(stability_scores)
+                exposure_scores = _pad(exposure_scores)
                 rms_scores = _pad(rms_scores)
                 onset_scores = _pad(onset_scores)
 
@@ -236,7 +288,9 @@ def run(
                         chunk_index=c,
                         t0=c * CHUNK_DURATION_S,
                         t1=(c + 1) * CHUNK_DURATION_S,
-                        motion_score=motion_scores[c],
+                        activity=activity_scores[c],
+                        stability=stability_scores[c],
+                        exposure=exposure_scores[c],
                         rms=rms_scores[c],
                         onset_strength=onset_scores[c],
                     )
