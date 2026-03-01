@@ -29,7 +29,7 @@ from .config import Settings, get_settings
 from .jobrunner import create_project, get_job, list_jobs, sse_stream, start_job
 from .pipeline import accel as accel_mod
 from .pipeline.types import AccelInfo
-from .pipeline.utils import manifest_read
+from .pipeline.utils import manifest_read, manifest_write
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,17 @@ async def project_run(req: RunJobRequest):
     existing = get_job(req.project_id)
     if existing and existing.status == "running":
         return RunJobResponse(job_id=existing.job_id)
+
+    # Persist run-specific settings into the manifest so the pipeline and
+    # cache hash computation can read them without signature changes.
+    try:
+        manifest = manifest_read(project_dir)
+        manifest.job_settings.target_length_s = req.target_length_s
+        manifest.job_settings.export_mode = req.export_mode
+        manifest.job_settings.music_volume = req.music_volume
+        manifest_write(project_dir, manifest)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cannot update manifest: {exc}")
 
     job_id = await start_job(settings, req.project_id, project_dir)
     return RunJobResponse(job_id=job_id)

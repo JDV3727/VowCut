@@ -5,9 +5,39 @@ Values can be overridden by environment variables (prefixed VOWCUT_).
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_tool(name: str) -> str:
+    """
+    Resolve a tool binary (e.g. "ffmpeg", "ffprobe") using this priority:
+    1. Explicit env var VOWCUT_FFMPEG_PATH (for "ffmpeg") or VOWCUT_FFPROBE_PATH
+    2. Bundled binary at $VOWCUT_RESOURCES_PATH/ffmpeg/{name}
+    3. System PATH (shutil.which)
+    Falls back to the bare name if nothing is found.
+    """
+    # 1. Explicit env var
+    env_key = f"VOWCUT_{name.upper()}_PATH"
+    env_val = os.environ.get(env_key, "")
+    if env_val and Path(env_val).exists():
+        return env_val
+
+    # 2. Bundled binary
+    resources_path = os.environ.get("VOWCUT_RESOURCES_PATH", "")
+    if resources_path:
+        bundled = Path(resources_path) / "ffmpeg" / name
+        if bundled.exists():
+            return str(bundled)
+
+    # 3. System PATH
+    found = shutil.which(name)
+    if found:
+        return found
+
+    return name
 
 
 class Settings(BaseSettings):
@@ -16,7 +46,7 @@ class Settings(BaseSettings):
     # Directory under which per-job project folders are created
     projects_base_dir: str = str(Path.home() / "VowCut" / "projects")
 
-    # Optional explicit paths (empty → auto-detect via PATH)
+    # Optional explicit paths (empty → auto-detect via PATH / bundled binary)
     ffmpeg_path: str = ""
     ffprobe_path: str = ""
 
@@ -31,6 +61,14 @@ class Settings(BaseSettings):
 
     # Feature extraction
     chunk_duration_s: float = 2.0
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # If no explicit ffmpeg/ffprobe path was set, try bundled then system PATH
+        if not self.ffmpeg_path:
+            self.ffmpeg_path = _resolve_tool("ffmpeg")
+        if not self.ffprobe_path:
+            self.ffprobe_path = _resolve_tool("ffprobe")
 
 
 _settings: Settings | None = None

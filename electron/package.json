@@ -7,6 +7,7 @@
     "dev": "concurrently \"tsc -w -p tsconfig.json\" \"electron .\"",
     "build": "tsc -p tsconfig.json",
     "start": "electron .",
+    "prebuild": "bash ../scripts/build_backend.sh",
     "package:mac": "electron-builder --mac",
     "package:win": "electron-builder --win"
   },
@@ -36,11 +37,9 @@
       "node_modules/**/*"
     ],
     "extraResources": [
-      {
-        "from": "../backend",
-        "to": "backend",
-        "filter": ["**/*", "!tests/**", "!**/__pycache__/**"]
-      }
+      { "from": "build/python", "to": "python",  "filter": ["**/*"] },
+      { "from": "build/ffmpeg",  "to": "ffmpeg",  "filter": ["**/*"] },
+      { "from": "../backend",    "to": "backend",  "filter": ["**/*", "!tests/**", "!**/__pycache__/**"] }
     ],
     "mac": {
       "category": "public.app-category.video",

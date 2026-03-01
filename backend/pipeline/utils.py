@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import os
 import tempfile
@@ -46,6 +47,22 @@ def now_iso() -> str:
 # Atomic file write (write to tmp, then rename)
 # ---------------------------------------------------------------------------
 
+def _file_mtime(path: str | None) -> str | None:
+    """Return mtime as string, or 'missing' if the file doesn't exist."""
+    if path is None:
+        return None
+    try:
+        return str(Path(path).stat().st_mtime)
+    except OSError:
+        return "missing"
+
+
+def compute_hash(data: dict) -> str:
+    """Return the first 16 hex chars of SHA256 of the sorted JSON of *data*."""
+    serialized = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
+
+
 def atomic_write(path: Path | str, content: str) -> None:
     """Write *content* to *path* atomically (same filesystem)."""
     path = Path(path)
@@ -71,7 +88,9 @@ def _dict_to_manifest(d: dict) -> Manifest:
     """Reconstruct a Manifest dataclass from a raw dict (loaded from JSON)."""
     from .types import (
         AccelInfo,
+        JobSettings,
         PipelineState,
+        SettingsHashes,
         Source,
         SourceMetadata,
         StageStatuses,
@@ -120,6 +139,8 @@ def _dict_to_manifest(d: dict) -> Manifest:
     ver_d = d.get("versions", {})
     ss_d = d.get("stage_status", {})
     pl_d = d.get("pipeline", {})
+    sh_d = d.get("settings_hashes", {})
+    js_d = d.get("job_settings", {})
 
     return Manifest(
         schema_version=d.get("schema_version", "1.0"),
@@ -146,6 +167,20 @@ def _dict_to_manifest(d: dict) -> Manifest:
             overall_status=pl_d.get("overall_status", "idle"),
             error=pl_d.get("error"),
             warnings=pl_d.get("warnings", []),
+        ),
+        settings_hashes=SettingsHashes(
+            ingest=sh_d.get("ingest", ""),
+            proxy=sh_d.get("proxy", ""),
+            align=sh_d.get("align", ""),
+            features=sh_d.get("features", ""),
+            music=sh_d.get("music", ""),
+            assemble=sh_d.get("assemble", ""),
+            export=sh_d.get("export", ""),
+        ),
+        job_settings=JobSettings(
+            target_length_s=js_d.get("target_length_s", 240.0),
+            export_mode=js_d.get("export_mode", "fast_gpu"),
+            music_volume=js_d.get("music_volume", 0.6),
         ),
     )
 

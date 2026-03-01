@@ -56,6 +56,28 @@ class AccelInfo:
 
 
 # ---------------------------------------------------------------------------
+# Cache hashes and job settings
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SettingsHashes:
+    ingest: str = ""
+    proxy: str = ""
+    align: str = ""
+    features: str = ""
+    music: str = ""
+    assemble: str = ""
+    export: str = ""
+
+
+@dataclass
+class JobSettings:
+    target_length_s: float = 240.0
+    export_mode: str = "fast_gpu"
+    music_volume: float = 0.6
+
+
+# ---------------------------------------------------------------------------
 # Stage status
 # ---------------------------------------------------------------------------
 
@@ -108,6 +130,8 @@ class Manifest:
 
     stage_status: StageStatuses = field(default_factory=StageStatuses)
     pipeline: PipelineState = field(default_factory=PipelineState)
+    settings_hashes: SettingsHashes = field(default_factory=SettingsHashes)
+    job_settings: JobSettings = field(default_factory=JobSettings)
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from typing import Any, AsyncGenerator, Optional
 from .config import Settings
 from .pipeline import accel as accel_mod
 from .pipeline import align, assemble, export, features, ingest, music, proxies
+from .pipeline import cache
 from .pipeline.types import AccelInfo, Manifest, Source, SourceMetadata, StageStatuses, PipelineState, Versions
 from .pipeline.utils import (
     ProgressEmitter,
@@ -135,23 +136,26 @@ def _run_pipeline(job: JobRecord, settings: Settings) -> None:
         manifest.pipeline.overall_status = "running"
         manifest_write(job.project_dir, manifest)
 
+        js = manifest.job_settings
+
         # Stage order
         stages = [
-            ("ingest",   ingest.run),
-            ("proxy",    proxies.run),
-            ("align",    align.run),
-            ("features", features.run),
-            ("music",    lambda pd, m, e: (music.run(pd, m, e), m)[1]),
-            ("assemble", assemble.run),
-            ("export",   export.run),
+            ("ingest",   lambda pd, m, e: ingest.run(pd, m, e)),
+            ("proxy",    lambda pd, m, e: proxies.run(pd, m, e)),
+            ("align",    lambda pd, m, e: align.run(pd, m, e)),
+            ("features", lambda pd, m, e: features.run(pd, m, e)),
+            ("music",    lambda pd, m, e: music.run(pd, m, e)),
+            ("assemble", lambda pd, m, e: assemble.run(pd, m, e, target_length_s=js.target_length_s)),
+            ("export",   lambda pd, m, e: export.run(pd, m, e, export_mode=js.export_mode, music_volume=js.music_volume)),
         ]
 
         for stage_name, stage_fn in stages:
-            status_attr = getattr(manifest.stage_status, stage_name, "pending")
-            if status_attr == "done":
+            if cache.is_cached(stage_name, manifest):
                 emitter.emit(stage_name, "done", 1.0, "Skipped (cached)")
                 continue
             manifest = stage_fn(job.project_dir, manifest, emitter)
+            cache.store_hash(stage_name, manifest)
+            manifest_write(job.project_dir, manifest)
 
         manifest.pipeline.overall_status = "done"
         manifest_write(job.project_dir, manifest)
