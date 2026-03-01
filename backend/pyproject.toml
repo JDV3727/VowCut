@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "vowcut-backend"
+version = "1.0.0"
+description = "VowCut local wedding highlight generator — FastAPI backend"
+requires-python = ">=3.11"
+dependencies = []   # see requirements.txt
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["tests/*"]

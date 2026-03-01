@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vowcut/timeline.schema.json",
+  "title": "VowCut Timeline",
+  "description": "Ordered segment list produced by the assemble stage",
+  "type": "object",
+  "required": ["schema_version", "target_length_s", "created_at", "metadata", "segments"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "target_length_s": { "type": "number", "exclusiveMinimum": 0 },
+    "created_at": { "type": "string", "format": "date-time" },
+
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "encoder_used": { "type": "string" },
+        "feature_version": { "type": "string" },
+        "selection_version": { "type": "string" }
+      },
+      "required": ["encoder_used", "feature_version", "selection_version"]
+    },
+
+    "segments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Segment" },
+      "minItems": 1
+    }
+  },
+
+  "$defs": {
+    "Segment": {
+      "type": "object",
+      "properties": {
+        "master_t0": { "type": "number", "minimum": 0 },
+        "master_t1": { "type": "number", "exclusiveMinimum": 0 },
+        "source_id": { "type": "string" }
+      },
+      "required": ["master_t0", "master_t1", "source_id"]
+    }
+  }
+}

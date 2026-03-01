@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vowcut/manifest.schema.json",
+  "title": "VowCut Manifest",
+  "description": "Pipeline state for a single VowCut job",
+  "type": "object",
+  "required": ["schema_version", "job_id", "created_at", "updated_at", "stage_status", "pipeline"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "song_path": { "type": ["string", "null"] },
+
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Source" }
+    },
+
+    "accel": {
+      "oneOf": [
+        { "$ref": "#/$defs/AccelInfo" },
+        { "type": "null" }
+      ]
+    },
+
+    "versions": {
+      "type": "object",
+      "properties": {
+        "feature_version": { "type": "string" },
+        "selection_version": { "type": "string" }
+      },
+      "required": ["feature_version", "selection_version"]
+    },
+
+    "stage_status": {
+      "type": "object",
+      "properties": {
+        "ingest":   { "$ref": "#/$defs/StageStatus" },
+        "proxy":    { "$ref": "#/$defs/StageStatus" },
+        "align":    { "$ref": "#/$defs/StageStatus" },
+        "features": { "$ref": "#/$defs/StageStatus" },
+        "music":    { "$ref": "#/$defs/StageStatus" },
+        "assemble": { "$ref": "#/$defs/StageStatus" },
+        "export":   { "$ref": "#/$defs/StageStatus" }
+      },
+      "required": ["ingest", "proxy", "align", "features", "music", "assemble", "export"]
+    },
+
+    "pipeline": {
+      "type": "object",
+      "properties": {
+        "overall_status": { "type": "string", "enum": ["idle", "running", "done", "error"] },
+        "error": { "type": ["string", "null"] },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["overall_status"]
+    }
+  },
+
+  "$defs": {
+    "StageStatus": {
+      "type": "string",
+      "enum": ["pending", "running", "done", "error", "skipped"]
+    },
+
+    "SourceMetadata": {
+      "type": "object",
+      "properties": {
+        "duration_s": { "type": "number" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "fps": { "type": "number" },
+        "codec": { "type": "string" }
+      },
+      "required": ["duration_s", "width", "height", "fps", "codec"]
+    },
+
+    "SyncInfo": {
+      "type": "object",
+      "properties": {
+        "offset_s": { "type": "number" },
+        "scale": { "type": "number" },
+        "sync_confidence": { "type": "string", "enum": ["high", "medium", "low", "unset"] }
+      },
+      "required": ["offset_s", "scale", "sync_confidence"]
+    },
+
+    "Source": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "original_path": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/SourceMetadata" },
+        "proxy_path": { "type": ["string", "null"] },
+        "audio_path": { "type": ["string", "null"] },
+        "sync": { "$ref": "#/$defs/SyncInfo" }
+      },
+      "required": ["id", "original_path", "metadata"]
+    },
+
+    "AccelInfo": {
+      "type": "object",
+      "properties": {
+        "ffmpeg_path": { "type": "string" },
+        "ffprobe_path": { "type": "string" },
+        "selected_encoder": { "type": "string" },
+        "validated": { "type": "boolean" },
+        "fallbacks_used": { "type": "array", "items": { "type": "string" } },
+        "hevc_encoder": { "type": "string" },
+        "hevc_validated": { "type": "boolean" }
+      },
+      "required": ["ffmpeg_path", "ffprobe_path", "selected_encoder", "validated"]
+    }
+  }
+}

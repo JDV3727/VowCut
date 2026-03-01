@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "job_id": "00000000-0000-0000-0000-000000000001",
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "updated_at": "2026-01-01T00:00:00+00:00",
+  "sources": [
+    {
+      "id": "cam_a",
+      "original_path": "/tmp/cam_a.mp4",
+      "metadata": {
+        "duration_s": 10.0,
+        "width": 1280,
+        "height": 720,
+        "fps": 30.0,
+        "codec": "h264"
+      },
+      "proxy_path": null,
+      "audio_path": null,
+      "sync": {
+        "offset_s": 0.0,
+        "scale": 1.0,
+        "sync_confidence": "unset"
+      }
+    }
+  ],
+  "song_path": null,
+  "accel": {
+    "ffmpeg_path": "ffmpeg",
+    "ffprobe_path": "ffprobe",
+    "selected_encoder": "libx264",
+    "validated": true,
+    "fallbacks_used": [],
+    "hevc_encoder": "libx265",
+    "hevc_validated": true
+  },
+  "versions": {
+    "feature_version": "1",
+    "selection_version": "1"
+  },
+  "stage_status": {
+    "ingest": "pending",
+    "proxy": "pending",
+    "align": "pending",
+    "features": "pending",
+    "music": "pending",
+    "assemble": "pending",
+    "export": "pending"
+  },
+  "pipeline": {
+    "overall_status": "idle",
+    "error": null,
+    "warnings": []
+  }
+}
