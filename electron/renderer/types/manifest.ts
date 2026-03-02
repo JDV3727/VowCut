@@ -54,6 +54,22 @@ export interface PipelineState {
   warnings: string[];
 }
 
+export interface SettingsHashes {
+  ingest: string;
+  proxy: string;
+  align: string;
+  features: string;
+  music: string;
+  assemble: string;
+  export: string;
+}
+
+export interface JobSettings {
+  target_length_s: number;
+  export_mode: string;
+  music_volume: number;
+}
+
 export interface Manifest {
   schema_version: string;
   job_id: string;
@@ -65,6 +81,8 @@ export interface Manifest {
   versions: { feature_version: string; selection_version: string };
   stage_status: StageStatuses;
   pipeline: PipelineState;
+  settings_hashes: SettingsHashes;
+  job_settings: JobSettings;
 }
 
 export interface Segment {

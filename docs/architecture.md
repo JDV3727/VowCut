@@ -43,8 +43,11 @@ It consists of two processes:
 ## State Management
 
 - `manifest.json` is the single source of truth, written atomically after each stage.
-- Each stage checks `stage_status.<name> == "done"` and skips if true (idempotency).
-- `state.json` (Phase 4) adds settings hashes for cache invalidation.
+- `manifest.settings_hashes` stores per-stage SHA256 hashes of each stage's inputs.
+  Combined with `manifest.job_settings`, this drives cache invalidation: a stage is
+  skipped only when its status is "done" AND its stored hash matches the current inputs.
+- `manifest.job_settings` holds run-specific settings (target_length_s, export_mode,
+  music_volume) written by the API before the pipeline starts.
 
 ## GPU Strategy
 
