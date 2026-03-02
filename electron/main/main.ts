@@ -59,8 +59,11 @@ app.whenReady().then(async () => {
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverManager) {
-      const port = await serverManager.getPort();
-      if (port) await createWindow(port);
+      const port = serverManager.getPort();
+      if (port) {
+        await createWindow(port);
+        registerIpcHandlers(ipcMain, port);
+      }
     }
   });
 });
