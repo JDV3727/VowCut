@@ -18,25 +18,30 @@ BUILD_DIR="$ROOT_DIR/build"
 PBS_VERSION="20240415"
 PBS_PYTHON_VERSION="3.12.3"
 
-# python-build-standalone release tag and SHA256 per platform/arch
-# Update these when upgrading Python
+# python-build-standalone — SHA256s from the official SHA256SUMS file at:
+# https://github.com/astral-sh/python-build-standalone/releases/download/20240415/SHA256SUMS
 PBS_MACOS_ARM64_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/cpython-${PBS_PYTHON_VERSION}+${PBS_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
-PBS_MACOS_ARM64_SHA256="placeholder_macos_arm64_sha256"
+PBS_MACOS_ARM64_SHA256="ccc40e5af329ef2af81350db2a88bbd6c17b56676e82d62048c15d548401519e"
 
 PBS_MACOS_X86_64_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/cpython-${PBS_PYTHON_VERSION}+${PBS_VERSION}-x86_64-apple-darwin-install_only.tar.gz"
-PBS_MACOS_X86_64_SHA256="placeholder_macos_x86_64_sha256"
+PBS_MACOS_X86_64_SHA256="c37a22fca8f57d4471e3708de6d13097668c5f160067f264bb2b18f524c890c8"
 
 PBS_LINUX_X86_64_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/cpython-${PBS_PYTHON_VERSION}+${PBS_VERSION}-x86_64-unknown-linux-gnu-install_only.tar.gz"
-PBS_LINUX_X86_64_SHA256="placeholder_linux_x86_64_sha256"
+PBS_LINUX_X86_64_SHA256="a73ba777b5d55ca89edef709e6b8521e3f3d4289581f174c8699adfb608d09d6"
 
-# Static ffmpeg (macOS: evermeet.cx builds; Linux: BtbN/FFmpeg-Builds)
-FFMPEG_VERSION="7.0"
+# Static ffmpeg
+# macOS: evermeet.cx versioned builds (8.0.1)
+FFMPEG_MACOS_VERSION="8.0.1"
+FFMPEG_MACOS_URL="https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_MACOS_VERSION}.zip"
+FFMPEG_MACOS_SHA256="470e482f6e290eac92984ac12b2d67bad425b1e5269fd75fb6a3536c16e824e4"
+FFPROBE_MACOS_URL="https://evermeet.cx/ffmpeg/ffprobe-${FFMPEG_MACOS_VERSION}.zip"
+FFPROBE_MACOS_SHA256="219a3fcb26b6650b63989b0f151b47a13417c58b5b03924ef684416797b2ed7d"
 
-FFMPEG_MACOS_URL="https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-FFPROBE_MACOS_URL="https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip"
-
-FFMPEG_LINUX_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n${FFMPEG_VERSION}-linux64-gpl.tar.xz"
-FFMPEG_LINUX_SHA256="placeholder_linux_ffmpeg_sha256"
+# Linux: BtbN pinned autobuild (7.1.3 GPL static) — SHA256 from official checksums.sha256:
+# https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-11-30-12-53/checksums.sha256
+FFMPEG_LINUX_RELEASE="autobuild-2025-11-30-12-53"
+FFMPEG_LINUX_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_LINUX_RELEASE}/ffmpeg-n7.1.3-7-gf65fc0b137-linux64-gpl-7.1.tar.xz"
+FFMPEG_LINUX_SHA256="8d6bd76844206590809af4c5307968d39f9f8ab488d7aaf523e61b7fae2d41c8"
 
 # ---------------------------------------------------------------------------
 # Platform detection
@@ -85,13 +90,6 @@ echo "==> Platform: $PLATFORM/$ARCH"
 verify_sha256() {
   local file="$1"
   local expected="$2"
-
-  # Skip verification for placeholder values (development mode)
-  if [[ "$expected" == placeholder_* ]]; then
-    echo "    [WARN] SHA256 not pinned for $file — skipping verification"
-    return 0
-  fi
-
   local actual
   if command -v sha256sum &>/dev/null; then
     actual="$(sha256sum "$file" | awk '{print $1}')"
@@ -173,13 +171,15 @@ else
   mkdir -p "$FFMPEG_BUILD_DIR"
 
   if [[ "$PLATFORM" == "Darwin" ]]; then
-    echo "    Downloading ffmpeg (macOS) from evermeet.cx …"
+    echo "    Downloading ffmpeg ${FFMPEG_MACOS_VERSION} (macOS) from evermeet.cx …"
     curl -fsSL "$FFMPEG_MACOS_URL" -o "$BUILD_DIR/ffmpeg.zip"
+    verify_sha256 "$BUILD_DIR/ffmpeg.zip" "$FFMPEG_MACOS_SHA256"
     unzip -q "$BUILD_DIR/ffmpeg.zip" -d "$FFMPEG_BUILD_DIR"
     rm "$BUILD_DIR/ffmpeg.zip"
 
-    echo "    Downloading ffprobe (macOS) from evermeet.cx …"
+    echo "    Downloading ffprobe ${FFMPEG_MACOS_VERSION} (macOS) from evermeet.cx …"
     curl -fsSL "$FFPROBE_MACOS_URL" -o "$BUILD_DIR/ffprobe.zip"
+    verify_sha256 "$BUILD_DIR/ffprobe.zip" "$FFPROBE_MACOS_SHA256"
     unzip -q "$BUILD_DIR/ffprobe.zip" -d "$FFMPEG_BUILD_DIR"
     rm "$BUILD_DIR/ffprobe.zip"
   else
