@@ -28,6 +28,18 @@ contextBridge.exposeInMainWorld("vowcut", {
   /** Open a path in Finder/Explorer. */
   revealInFinder: (filePath: string): void =>
     ipcRenderer.send("shell:reveal", filePath),
+
+  /** Subscribe to backend crash notifications. Returns an unsubscribe function. */
+  onBackendCrashed: (
+    callback: (info: { code: number | null; signal: string | null }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { code: number | null; signal: string | null }
+    ) => callback(info);
+    ipcRenderer.on("backend-crashed", handler);
+    return () => ipcRenderer.off("backend-crashed", handler);
+  },
 });
 
 // Type declaration for the renderer
@@ -43,6 +55,9 @@ declare global {
       saveFile(defaultPath?: string): Promise<string | null>;
       getBackendPort(): Promise<number>;
       revealInFinder(filePath: string): void;
+      onBackendCrashed(
+        callback: (info: { code: number | null; signal: string | null }) => void
+      ): () => void;
     };
     __BACKEND_PORT__: number;
   }

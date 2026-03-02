@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FileDropZone } from "./components/FileDropZone";
 import { GpuBadge } from "./components/GpuBadge";
 import { PipelineProgress } from "./components/PipelineProgress";
@@ -19,8 +19,16 @@ export const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
 
+  const [crashError, setCrashError] = useState<string | null>(null);
+
   const { start, isLoading, error: startError } = useJob();
   const { overallStatus, reset } = useJobStore();
+
+  useEffect(() => {
+    return window.vowcut.onBackendCrashed(({ code, signal }) => {
+      setCrashError(`Backend process crashed (code=${code} signal=${signal}). Please restart VowCut.`);
+    });
+  }, []);
 
   const isRunning = overallStatus === "running" || isLoading;
   const isDone = overallStatus === "done";
@@ -57,6 +65,23 @@ export const App: React.FC = () => {
         boxSizing: "border-box",
       }}
     >
+      {/* Backend crash banner */}
+      {crashError && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "12px 16px",
+            background: "rgba(255,69,58,0.12)",
+            border: "1px solid rgba(255,69,58,0.5)",
+            borderRadius: 10,
+            color: "#ff453a",
+            fontSize: 14,
+          }}
+        >
+          {crashError}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
         <div>
