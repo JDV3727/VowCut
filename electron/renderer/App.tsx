@@ -18,10 +18,11 @@ export const App: React.FC = () => {
   const [song, setSong] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRerunSettings, setShowRerunSettings] = useState(false);
 
   const [crashError, setCrashError] = useState<string | null>(null);
 
-  const { start, isLoading, error: startError } = useJob();
+  const { start, rerun, isLoading, error: startError } = useJob();
   const { overallStatus, reset } = useJobStore();
 
   useEffect(() => {
@@ -51,7 +52,17 @@ export const App: React.FC = () => {
     setSources([]);
     setSong([]);
     setSettings(DEFAULT_SETTINGS);
+    setShowRerunSettings(false);
     reset();
+  };
+
+  const handleRerun = async () => {
+    setShowRerunSettings(false);
+    await rerun({
+      targetLengthS: settings.targetLengthS,
+      exportMode: settings.exportMode,
+      musicVolume: settings.musicVolume,
+    });
   };
 
   return (
@@ -149,9 +160,37 @@ export const App: React.FC = () => {
           <ExportReview />
 
           {(isDone || overallStatus === "error") && (
-            <button onClick={handleReset} style={{ ...ghostBtn, marginTop: 16 }}>
-              Start new project
-            </button>
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                onClick={() => setShowRerunSettings((v) => !v)}
+                style={ghostBtn}
+                disabled={isLoading}
+              >
+                {showRerunSettings ? "Cancel re-run" : "Re-run with different settings"}
+              </button>
+
+              {showRerunSettings && (
+                <div style={{ padding: 16, background: "#2c2c2e", borderRadius: 10 }}>
+                  <SettingsPanel settings={settings} onChange={setSettings} />
+                  {startError && (
+                    <p style={{ color: "#ff453a", margin: "10px 0 0", fontSize: 13 }}>
+                      {startError}
+                    </p>
+                  )}
+                  <button
+                    onClick={handleRerun}
+                    disabled={isLoading}
+                    style={{ ...primaryBtn, marginTop: 16 }}
+                  >
+                    {isLoading ? "Starting…" : "Re-generate Highlight"}
+                  </button>
+                </div>
+              )}
+
+              <button onClick={handleReset} style={ghostBtn}>
+                New project
+              </button>
+            </div>
           )}
         </div>
       )}

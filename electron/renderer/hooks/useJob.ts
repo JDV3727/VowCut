@@ -14,8 +14,15 @@ interface UseJobOptions {
   musicVolume?: number;
 }
 
+interface RerunOptions {
+  targetLengthS?: number;
+  exportMode?: string;
+  musicVolume?: number;
+}
+
 interface UseJobReturn {
   start: (opts: UseJobOptions) => Promise<void>;
+  rerun: (opts: RerunOptions) => Promise<void>;
   isLoading: boolean;
   error: string | null;
 }
@@ -23,7 +30,7 @@ interface UseJobReturn {
 export function useJob(): UseJobReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setProject, setJobId, jobId } = useJobStore();
+  const { setProject, setJobId, jobId, projectId, rerun: storeRerun } = useJobStore();
 
   // Subscribe to SSE when we have a jobId
   useProgress(jobId);
@@ -65,5 +72,34 @@ export function useJob(): UseJobReturn {
     [setProject, setJobId]
   );
 
-  return { start, isLoading, error };
+  const rerun = useCallback(
+    async ({
+      targetLengthS = 240,
+      exportMode = "fast_gpu",
+      musicVolume = 0.6,
+    }: RerunOptions) => {
+      if (!projectId) return;
+      setIsLoading(true);
+      setError(null);
+      storeRerun();
+
+      try {
+        const { job_id } = await runJob({
+          project_id: projectId,
+          export_mode: exportMode,
+          target_length_s: targetLengthS,
+          music_volume: musicVolume,
+        });
+        setJobId(job_id);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [projectId, setJobId, storeRerun]
+  );
+
+  return { start, rerun, isLoading, error };
 }

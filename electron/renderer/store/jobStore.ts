@@ -30,7 +30,10 @@ export interface JobState {
   setJobId(jobId: string): void;
   applyProgress(event: ProgressEvent): void;
   setExportPath(path: string): void;
+  /** Full reset — clears project and all state. */
   reset(): void;
+  /** Partial reset — keeps projectId/projectDir, clears stage/job state for a re-run. */
+  rerun(): void;
 }
 
 const defaultStages = (): Record<StageName, StageInfo> =>
@@ -99,6 +102,16 @@ export const useJobStore = create<JobState>((set, get) => ({
       projectId: null,
       jobId: null,
       projectDir: null,
+      overallStatus: "idle",
+      error: null,
+      stages: defaultStages(),
+      exportPath: null,
+      warnings: [],
+    }),
+
+  rerun: () =>
+    set({
+      jobId: null,
       overallStatus: "idle",
       error: null,
       stages: defaultStages(),
